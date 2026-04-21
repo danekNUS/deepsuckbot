@@ -31,7 +31,7 @@ bot.on("text", async (ctx) => {
     const response = await axios.post(
       "https://openrouter.ai/api/v1/chat/completions",
       {
-        model: "mistralai/mistral-7b-instruct:free",
+        model: "google/gemma-4-31b-it:free",
         messages: [
           {
             role: "system",
