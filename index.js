@@ -11,14 +11,14 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 const app = express();
 
 // =====================
-// HEALTHCHECK (Render)
+// HEALTHCHECK
 // =====================
 app.get("/ping", (req, res) => {
   res.send("pong");
 });
 
 // =====================
-// AI MODELS (fallback chain)
+// MODELS LIST
 // =====================
 const models = [
   "google/gemma-4-31b-it:free",
@@ -29,24 +29,28 @@ const models = [
 ];
 
 // =====================
-// TELEGRAM START
+// BOT START
 // =====================
 bot.start((ctx) => {
   ctx.reply("Привет 👋 Я AI бот. Напиши сообщение.");
 });
 
 // =====================
-// MAIN HANDLER
+// MAIN LOGIC
 // =====================
 bot.on("text", async (ctx) => {
   const userMessage = ctx.message.text;
 
-  try {
-    let response;
-    let lastError;
+  const startTime = Date.now(); // ⏱ старт таймера
 
-    // пробуем модели по очереди
+  let response;
+  let usedModel = null;
+  let triedCount = 0;
+
+  try {
     for (const model of models) {
+      triedCount++;
+
       try {
         response = await axios.post(
           "https://openrouter.ai/api/v1/chat/completions",
@@ -55,7 +59,7 @@ bot.on("text", async (ctx) => {
             messages: [
               {
                 role: "system",
-                content: "Ты умный, краткий и полезный ассистент."
+                content: "Ты полезный, краткий и умный ассистент."
               },
               {
                 role: "user",
@@ -73,30 +77,42 @@ bot.on("text", async (ctx) => {
           }
         );
 
-        break; // если успешно — выходим
+        usedModel = model;
+        break; // 🧠 остановились на первой рабочей
+
       } catch (err) {
         console.log(`Model failed: ${model}`);
-        lastError = err;
       }
     }
 
-    if (!response) throw lastError;
+    if (!response) {
+      throw new Error("All models failed");
+    }
 
     const reply = response.data.choices[0].message.content;
-    ctx.reply(reply);
+
+    const endTime = Date.now();
+    const timeTaken = ((endTime - startTime) / 1000).toFixed(2);
+
+    ctx.reply(
+      `🤖 Модель: ${usedModel}\n` +
+      `🔁 Попыток: ${triedCount}\n` +
+      `⏱ Время: ${timeTaken}s\n\n` +
+      reply
+    );
 
   } catch (error) {
     console.log("AI ERROR:", error.response?.data || error.message);
 
     ctx.reply(
       "Ошибка AI 😢\n\n" +
-      (error.response?.data?.error?.message || "unknown error")
+      (error.response?.data?.error?.message || error.message)
     );
   }
 });
 
 // =====================
-// ERROR SAFETY
+// SAFETY
 // =====================
 process.on("unhandledRejection", (err) => {
   console.log("Unhandled rejection:", err);
@@ -120,6 +136,6 @@ app.listen(PORT, () => {
 // =====================
 bot.launch();
 
-// graceful stop (Render safe shutdown)
+// graceful shutdown
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));
